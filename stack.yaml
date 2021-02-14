@@ -1,0 +1,13 @@
+resolver: lts-13.26
+
+packages:
+- .
+
+extra-deps:
+    - gi-gtk-declarative-0.4.2@sha256:8f6a0c3fe61143b07b857d28ec4354c6e5540971ffbaf39837009e81c288a0bd
+    - gi-gtk-declarative-app-simple-0.4.1@sha256:5090c7bc7bdf950eb0c98561b8de47d452eacee8871c640509ec4d72781a999d
+    - polysemy-0.4.0.0@sha256:6dfd2070c9f1f8e64ba9fbeee2af59e2893cac8acb066c2c80cf6428e2ddcef9,4004
+    - polysemy-plugin-0.2.1.0@sha256:db5aa30eb9610c6c7aca782f68a128fef4656c867ed29ad328eb1322d8d9b414,2516
+    - th-abstraction-0.3.1.0@sha256:96042f6658f2dccfac03b33f0fd59f62b1f65b9b0a765d8a2ea6026f4081ee4a,1838
+
+compiler-check: newer-minor
