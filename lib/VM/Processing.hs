@@ -1,23 +1,27 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 module VM.Processing where
-
-import           Control.Monad.Freer
-import           Control.Monad.Freer.State
-import           Control.Monad.Freer.Reader
-import           Control.Monad.Freer.Writer
-import           Data.Monoid                    ( (<>) )
 
 import           VM.Types                      as VM
 import           Assembly.Types                as ASM
 import           Common.Types
+import Polysemy
+import Polysemy.Writer
+import Polysemy.Reader
+import Polysemy.State
+
+data VMCompiler m a where
+  NewDynRetLoc ::String -> VMCompiler m String
+  GetFilename ::VMCompiler m String
+  Emit :: Source 'AST 'Unresolved ASM.Command -> VMCompiler m ()
+  
+makeSem ''VMCompiler
 
 compile :: String -> [Source 'AST 'Unresolved VM.Command] -> [Source 'AST 'Unresolved ASM.Command]
-compile filename ast = snd . run $ effectsStack program
+compile filename ast = fst . run $ effectsStack program
   where program = sequence_ (compileCommand . unSource <$> ast) >> halt >> subroutines
         effectsStack = evalState 0 . runReader filename . runWriter . vmCompilerToState
 
 vmCompilerToState
-  :: Eff (VMCompiler ': effs) ~> Eff (Writer [Source 'AST 'Unresolved ASM.Command] ': Reader String ': State Int ': effs)
+  :: Sem (VMCompiler ': effs) a -> Sem (Writer [Source 'AST 'Unresolved ASM.Command] ': Reader String ': State Int ': effs) a
 vmCompilerToState = reinterpret3 $ \case
   NewDynRetLoc prefix -> do
     cnt :: Int <- get
@@ -26,25 +30,11 @@ vmCompilerToState = reinterpret3 $ \case
   GetFilename -> ask
   Emit com    -> tell [com]
 
-data VMCompiler a where
-  NewDynRetLoc ::String -> VMCompiler String
-  GetFilename ::VMCompiler String
-  Emit :: Source 'AST 'Unresolved ASM.Command -> VMCompiler ()
-
-newDynRetLoc :: Member VMCompiler effs => String -> Eff effs String
-newDynRetLoc = send . NewDynRetLoc
-
-getFilename :: Member VMCompiler effs => Eff effs String
-getFilename = send GetFilename
-
-emit :: Member VMCompiler effs => Source 'AST 'Unresolved ASM.Command -> Eff effs ()
-emit c = send $ Emit c
-
-halt :: Member VMCompiler effs => Eff effs ()
+halt :: Member VMCompiler effs => Sem effs ()
 halt = loc "_HALT" >> jmpLbl "_HALT"
 
 -- TODO: dedup segment push\pop
-compileCommand :: Member VMCompiler effs => VM.Command -> Eff effs ()
+compileCommand :: Member VMCompiler effs => VM.Command -> Sem effs ()
 compileCommand (Push Constant value) = do
   loadI value
   push
@@ -53,8 +43,8 @@ compileCommand (Pop Constant _) = error "Pop constant"
 compileCommand (Push Argument value) = pushSegment atARG value
 compileCommand (Pop Argument index) = popSegment atARG index
 
-compileCommand (Push Local value) = pushSegment atLCL value
-compileCommand (Pop Local index) = popSegment atLCL index
+compileCommand (Push VM.Local value) = pushSegment atLCL value
+compileCommand (Pop VM.Local index) = popSegment atLCL index
 
 compileCommand (Push This value) = pushSegment atTHIS value
 compileCommand (Pop This index) = popSegment atTHIS index
@@ -146,7 +136,7 @@ compileCommand VM.Not = do
   atSP
   increment
 
-pushSegment :: Member VMCompiler effs => Eff effs a -> Address -> Eff effs ()
+pushSegment :: Member VMCompiler effs => Sem effs a -> Address -> Sem effs ()
 pushSegment segment i = do
   loadI i
   _ <- segment
@@ -154,7 +144,7 @@ pushSegment segment i = do
   load
   push
 
-popSegment :: Member VMCompiler effs => Eff effs a -> Address -> Eff effs ()
+popSegment :: Member VMCompiler effs => Sem effs a -> Address -> Sem effs ()
 popSegment segment i = do
   loadI i
   _ <- segment
@@ -169,7 +159,7 @@ popSegment segment i = do
 -- subroutines
 -- TODO: Extract common parts and try to unify to single subroutine
 -- TODO: Compare-subroutine?
-subroutines :: Member VMCompiler effs => Eff effs ()
+subroutines :: Member VMCompiler effs => Sem effs ()
 subroutines = eqSubroutine >> ltSubroutine >> gtSubroutine
 
 -- | Subroutine to check if values are equal
@@ -177,7 +167,7 @@ subroutines = eqSubroutine >> ltSubroutine >> gtSubroutine
 -- 2. Store return address to R15
 -- 3. Jump to _EQ
 -- 4. R1 will contain true or false value after return
-eqSubroutine :: Member VMCompiler effs => Eff effs ()
+eqSubroutine :: Member VMCompiler effs => Sem effs ()
 eqSubroutine = do
   loc "_EQ"
   loadR 1
@@ -201,7 +191,7 @@ eqSubroutine = do
 -- 2. Store return address to R15
 -- 3. Jump to _EQ
 -- 4. R1 will contain true or false value after return
-ltSubroutine :: Member VMCompiler effs => Eff effs ()
+ltSubroutine :: Member VMCompiler effs => Sem effs ()
 ltSubroutine = do
   loc "_LT"
   loadR 1
@@ -225,7 +215,7 @@ ltSubroutine = do
 -- 2. Store return address to R15
 -- 3. Jump to _EQ
 -- 4. R1 will contain true or false value after return
-gtSubroutine :: Member VMCompiler effs => Eff effs ()
+gtSubroutine :: Member VMCompiler effs => Sem effs ()
 gtSubroutine = do
   loc "_GT"
   loadR 1
@@ -244,21 +234,21 @@ gtSubroutine = do
   command $ CInstruction [A] (Identity (Reg M)) Nothing
   jmp
 
-command :: Member VMCompiler effs => ASM.Command -> Eff effs ()
+command :: Member VMCompiler effs => ASM.Command -> Sem effs ()
 command c = emit $ Source c
 
 -- Jumps, labels, locations
 -- | Sets A to address of @lbl@
-atLbl :: Member VMCompiler effs => String -> Eff effs ()
+atLbl :: Member VMCompiler effs => String -> Sem effs ()
 atLbl lbl = command $ AInstruction (Label lbl)
 
 -- | Sets A to register @r@
-atR :: Member VMCompiler effs => Address -> Eff effs ()
+atR :: Member VMCompiler effs => Address -> Sem effs ()
 atR r = command $ AInstruction (Address r)
 
 -- | Sets A to corresponding VM segment base
 atSP, atLCL, atARG, atTHIS, atTHAT, atTEMP
-  :: Member VMCompiler effs => Eff effs ()
+  :: Member VMCompiler effs => Sem effs ()
 atSP = atLbl "SP"
 atLCL = atLbl "LCL"
 atARG = atLbl "ARG"
@@ -267,21 +257,21 @@ atTHAT = atLbl "THAT"
 atTEMP = atLbl "TEMP"
 
 -- | Pops value from stack and sets A to it.
-derefSP :: Member VMCompiler effs => Eff effs ()
+derefSP :: Member VMCompiler effs => Sem effs ()
 derefSP = do
   atSP
   decrement
   deref
 
-loc :: Member VMCompiler effs => String -> Eff effs ()
+loc :: Member VMCompiler effs => String -> Sem effs ()
 loc l = command $ Location l
 
 -- | Jumps to @l@ label unconditionally
-jmpLbl :: Member VMCompiler effs => String -> Eff effs ()
+jmpLbl :: Member VMCompiler effs => String -> Sem effs ()
 jmpLbl l = atLbl l >> jmp
 
 -- | Jumps to current A unconditionally
-jmp :: Member VMCompiler effs => Eff effs ()
+jmp :: Member VMCompiler effs => Sem effs ()
 jmp = command $ CInstruction [] (Identity (Val 0)) (Just JEQ)
 
 -- | Bool values
@@ -291,11 +281,11 @@ false = 0x0000
 
 -- Stack ops
 -- | Pop stack value to D
-pop :: Member VMCompiler effs => Eff effs ()
+pop :: Member VMCompiler effs => Sem effs ()
 pop = atSP >> decrement >> deref >> load
 
 -- | Pop @n@ values from stack and store them in registers from @Rn@ to @R0@ in reverse order
-popArgs :: Member VMCompiler effs => Value -> Eff effs ()
+popArgs :: Member VMCompiler effs => Value -> Sem effs ()
 popArgs 0 = pure ()
 popArgs n = do
   pop
@@ -303,46 +293,46 @@ popArgs n = do
   popArgs (n - 1)
 
 -- | Push D to stack
-push :: Member VMCompiler effs => Eff effs ()
+push :: Member VMCompiler effs => Sem effs ()
 push = atSP >> deref >> store >> atSP >> increment
 
 -- Memory ops
 -- | Load M to D
-load :: Member VMCompiler effs => Eff effs ()
+load :: Member VMCompiler effs => Sem effs ()
 load = command $ CInstruction [D] (Identity (Reg M)) Nothing
 
 -- | Load @Rr@ to D
-loadR :: Member VMCompiler effs => Address -> Eff effs ()
+loadR :: Member VMCompiler effs => Address -> Sem effs ()
 loadR r = atR r >> load
 
 -- | Load @v@ to D
-loadI :: Member VMCompiler effs => Value -> Eff effs ()
+loadI :: Member VMCompiler effs => Value -> Sem effs ()
 loadI v = do
   command $ AInstruction (Address v)
   command $ CInstruction [D] (Identity (Reg A)) Nothing
 
 -- | Store D to M
-store :: Member VMCompiler effs => Eff effs ()
+store :: Member VMCompiler effs => Sem effs ()
 store = command $ CInstruction [M] (Identity (Reg D)) Nothing
 
 -- | Store @Rr@ to M
-storeR :: Member VMCompiler effs => Address -> Eff effs ()
+storeR :: Member VMCompiler effs => Address -> Sem effs ()
 storeR r = atR r >> store
 
 -- | Store @v@ to M
-storeI :: Member VMCompiler effs => Value -> Eff effs ()
+storeI :: Member VMCompiler effs => Value -> Sem effs ()
 storeI v = do
   command $ AInstruction (Address v)
   command $ CInstruction [M] (Identity (Reg A)) Nothing
 
 -- | Load M to A
-deref :: Member VMCompiler effs => Eff effs ()
+deref :: Member VMCompiler effs => Sem effs ()
 deref = command $ CInstruction [A] (Identity (Reg M)) Nothing
 
 -- | Decrement value in M
-decrement :: Member VMCompiler effs => Eff effs ()
+decrement :: Member VMCompiler effs => Sem effs ()
 decrement = command $ CInstruction [M] (Minus M (Val 1)) Nothing
 
 -- | Increment value in M
-increment :: Member VMCompiler effs => Eff effs ()
+increment :: Member VMCompiler effs => Sem effs ()
 increment = command $ CInstruction [M] (Plus M (Val 1)) Nothing
