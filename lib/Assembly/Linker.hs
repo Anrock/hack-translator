@@ -10,6 +10,7 @@ import qualified Data.Map.Strict as M
 
 import Assembly.Types
 import Common.Types
+import Polysemy.State
 
 type Symbol   = String
 type SymbolTable = M.Map String (Maybe Address)
@@ -34,7 +35,8 @@ predefinedSymbols = M.fromList $ [("SP",     Just 0),
 
 runSymResolver :: SymResolverState -> Sem (SymResolver' ': r) a -> Sem r SymResolverState
 runSymResolver symres = execState symres . symresToState where
-  symresToState = interpret $ \case
+  symresToState :: Sem (SymResolver' ': eff) a -> Sem (State SymResolverState ': eff) a
+  symresToState = reinterpret $ \case
     GetLineNum    -> gets line
     GetDynAddress -> gets nextDynAddr
     BumpLine      -> modify (\s@SymResolverState {line} -> s {line = succ line})
@@ -48,42 +50,37 @@ runSymResolver symres = execState symres . symresToState where
                                               _          -> False) <$> gets symtab
 
 -- TODO: Remove excessive effects
-data SymResolver' a where
-  GetLineNum     :: SymResolver' Address
-  GetDynAddress  :: SymResolver' Address
-  BumpLine       :: SymResolver' ()
-  BumpDynAddress :: SymResolver' ()
-  GetUnresolved  :: SymResolver' [Symbol]
-  ResolveTo      :: Symbol -> Address -> SymResolver' ()
-  AddSymbol      :: Symbol -> SymResolver' ()
+data SymResolver' m a where
+  GetLineNum     :: SymResolver' m Address
+  GetDynAddress  :: SymResolver' m Address
+  BumpLine       :: SymResolver' m ()
+  BumpDynAddress :: SymResolver' m ()
+  GetUnresolved  :: SymResolver' m [Symbol]
+  ResolveTo      :: Symbol -> Address -> SymResolver' m ()
+  AddSymbol      :: Symbol -> SymResolver' m ()
 
 makeSem ''SymResolver'
 
-resolveLocation :: Member SymResolver' effs => String -> Eff effs ()
+resolveLocation :: Member SymResolver' effs => String -> Sem effs ()
 resolveLocation sym = do
-  line <- send GetLineNum
+  line <- getLineNum
   resolveTo sym line
 
-resolveDynamic :: Member SymResolver' effs => Symbol -> Eff effs ()
+resolveDynamic :: Member SymResolver' effs => Symbol -> Sem effs ()
 resolveDynamic s = do
-  loc <- send GetDynAddress
+  loc <- getDynAddress
   resolveTo s loc
-  bumpDynLocation
+  bumpDynAddress
 
-resolveTo :: Member SymResolver' effs => String -> Address -> Eff effs ()
-resolveTo l a = send (ResolveTo l a)
-
-addSymbol :: Member SymResolver' effs => String -> Eff effs ()
-addSymbol sym = send (AddSymbol sym)
-
-resolveDynamics :: Member SymResolver' effs => Eff effs ()
+resolveDynamics :: Member SymResolver' effs => Sem effs ()
 resolveDynamics = do
-  unresolved <- send GetUnresolved
+  unresolved <- getUnresolved
   mapM_ resolveDynamic unresolved
 
-gather :: Member SymResolver' effs => [Source 'AST 'Unresolved Command] -> Eff effs ()
+gather :: Member SymResolver' effs => [Source 'AST 'Unresolved Command] -> Sem effs ()
 gather src = mapM_ gather' src >> resolveDynamics
-  where gather' (Source (AInstruction (Label l))) = addSymbol l >> bumpLine
+  where gather' :: Member SymResolver' effs => Source 'AST 'Unresolved Command -> Sem effs ()
+        gather' (Source (AInstruction (Label l))) = addSymbol l >> bumpLine
         gather' (Source (Location l)) = resolveLocation l
         gather' _ = bumpLine
 
