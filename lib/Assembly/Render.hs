@@ -2,7 +2,6 @@
 -- | See 'Render' typeclass
 module Assembly.Render where
 import Assembly.Types
-import Data.Monoid ((<>))
 
 class Render a where
   render :: a -> String

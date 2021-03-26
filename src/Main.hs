@@ -15,7 +15,6 @@ import qualified Assembly.Render as Asm
 import REPL (repl)
 
 import qualified Hack.Compilation as Hack
-import Data.Monoid ((<>))
 
 {-
 TODO:

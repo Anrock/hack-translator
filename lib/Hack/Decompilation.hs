@@ -8,10 +8,8 @@ import           Hack.Common
 import           Hack.Compilation
 import           Assembly.Types
 import           Data.Word
-import           Data.Bits
 import           Text.Megaparsec
 import           Data.Void
-import           Data.Proxy
 
 type Parser = Parsec Void Binary
 
