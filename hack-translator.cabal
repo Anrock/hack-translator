@@ -69,28 +69,6 @@ executable hackc
     , ansi-terminal
     , repline
 
-executable hack-gtk
-  default-language: Haskell2010
-  default-extensions: DuplicateRecordFields,
-                      NamedFieldPuns,
-                      LambdaCase,
-                      TypeOperators,
-                      GADTs,
-                      DataKinds,
-                      FlexibleContexts,
-                      OverloadedLabels,
-                      OverloadedLists,
-                      OverloadedStrings
-  ghc-options: -Wall -threaded
-  main-is: MainGtk.hs
-  hs-source-dirs:
-    src
-
-  build-depends:
-      base
-    , hack-translator
-    , haskell-gi, gi-gtk, gi-gtk-declarative, gi-gtk-declarative-app-simple
-
 test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
