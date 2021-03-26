@@ -20,7 +20,8 @@ library
                       TypeOperators,
                       TemplateHaskell
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-               -fplugin=Polysemy.Plugin -flate-specialise -fspecialise-aggressively
+               -- -fplugin=Polysemy.Plugin -- temporary disable, because SAT causes panic
+               -flate-specialise -fspecialise-aggressively
   hs-source-dirs:
       lib
   exposed-modules:
