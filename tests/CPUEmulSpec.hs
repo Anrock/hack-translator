@@ -50,9 +50,9 @@ inputsTable =
   ]
 
 inputToExpectation (en, x, y, zx, nx, zy, ny, f, no, out, zr, ng) =
-  let inputs = ALUInputs{x, y, zx, nx, zy, ny, f, no}
+  let flags = ALUFlags{zx, nx, zy, ny, f, no}
       expectedOutputs = ALUOutputs{out, zr, ng}
-      actualOutputs = alu inputs
+      actualOutputs = alu flags x y
   in it ("for inputs #" <> show en) $ actualOutputs `shouldBe` expectedOutputs
 
 cpuSpec :: SpecWith ()
