@@ -11,6 +11,7 @@ import qualified Data.Map.Strict as M
 import Assembly.Types
 import Common.Types
 import Polysemy.State
+import Data.Maybe (isNothing)
 
 type Symbol   = String
 type SymbolTable = M.Map String (Maybe Address)
@@ -47,8 +48,7 @@ runSymResolver symres = execState symres . symresToState where
       (\s@SymResolverState {symtab} -> s {symtab = M.insert l (Just a) symtab})
     (AddSymbol sym) -> modify (\s@SymResolverState{symtab} ->
       s {symtab = M.insertWith (\_ old -> old) sym Nothing symtab})
-    GetUnresolved -> M.keys . M.filter (\case Nothing -> True
-                                              _          -> False) <$> gets symtab
+    GetUnresolved -> M.keys . M.filter isNothing <$> gets symtab
 
 -- TODO: Remove excessive effects
 data SymResolver' m a where
