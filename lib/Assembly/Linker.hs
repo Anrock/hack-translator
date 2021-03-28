@@ -61,27 +61,13 @@ data SymResolver' m a where
 
 makeSem ''SymResolver'
 
-resolveLocation :: Member SymResolver' effs => String -> Sem effs ()
-resolveLocation sym = do
-  line <- getLineNum
-  resolveTo sym line
-
-resolveDynamic :: Member SymResolver' effs => Symbol -> Sem effs ()
-resolveDynamic s = do
-  loc <- getDynAddress
-  resolveTo s loc
-
-resolveDynamics :: Member SymResolver' effs => Sem effs ()
-resolveDynamics = do
-  unresolved <- getUnresolved
-  mapM_ resolveDynamic unresolved
-
 gather :: Member SymResolver' effs => [Source 'AST 'Unresolved Command] -> Sem effs ()
 gather src = mapM_ gather' src >> resolveDynamics
   where gather' :: Member SymResolver' effs => Source 'AST 'Unresolved Command -> Sem effs ()
         gather' (Source (AInstruction (Label l))) = addSymbol l >> bumpLine
-        gather' (Source (Location l)) = resolveLocation l
+        gather' (Source (Location l)) = getLineNum >>= resolveTo l
         gather' _ = bumpLine
+        resolveDynamics = getUnresolved >>= mapM_ (\s -> getDynAddress >>= resolveTo s)
 
 -- | Resolve labels\locations against given 'SymbolTable'
 resolveWith :: [Source 'AST 'Unresolved Command] -> SymbolTable -> [Source 'AST 'Resolved Command]
