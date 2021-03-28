@@ -38,10 +38,11 @@ runSymResolver symres = execState symres . symresToState where
   symresToState :: Sem (SymResolver' ': eff) a -> Sem (State SymResolverState ': eff) a
   symresToState = reinterpret $ \case
     GetLineNum    -> gets line
-    GetDynAddress -> gets nextDynAddr
+    GetDynAddress -> do 
+      addr <- gets nextDynAddr
+      modify (\s@SymResolverState {nextDynAddr} -> s {nextDynAddr = succ nextDynAddr})
+      pure addr
     BumpLine      -> modify (\s@SymResolverState {line} -> s {line = succ line})
-    BumpDynAddress -> modify
-      (\s@SymResolverState {nextDynAddr} -> s {nextDynAddr = succ nextDynAddr})
     (ResolveTo l a) -> modify
       (\s@SymResolverState {symtab} -> s {symtab = M.insert l (Just a) symtab})
     (AddSymbol sym) -> modify (\s@SymResolverState{symtab} ->
@@ -54,7 +55,6 @@ data SymResolver' m a where
   GetLineNum     :: SymResolver' m Address
   GetDynAddress  :: SymResolver' m Address
   BumpLine       :: SymResolver' m ()
-  BumpDynAddress :: SymResolver' m ()
   GetUnresolved  :: SymResolver' m [Symbol]
   ResolveTo      :: Symbol -> Address -> SymResolver' m ()
   AddSymbol      :: Symbol -> SymResolver' m ()
@@ -70,7 +70,6 @@ resolveDynamic :: Member SymResolver' effs => Symbol -> Sem effs ()
 resolveDynamic s = do
   loc <- getDynAddress
   resolveTo s loc
-  bumpDynAddress
 
 resolveDynamics :: Member SymResolver' effs => Sem effs ()
 resolveDynamics = do
