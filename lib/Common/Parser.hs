@@ -1,10 +1,10 @@
 -- | Common parser types and functions
 module Common.Parser where
 
-import qualified Text.Megaparsec.Char.Lexer as L
 import Data.Void
-import Text.Megaparsec.Char
 import Text.Megaparsec
+import Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void String
 
@@ -27,6 +27,6 @@ number = L.signed sc (lexeme L.decimal)
 
 identifier :: Parser String
 identifier = lexeme $ (:) <$> allowedNonDigit <*> many allowed
-    where allowedNonDigit = letterChar <|> oneOf "_.$:"
-          allowed = allowedNonDigit <|> digitChar
-
+  where
+    allowedNonDigit = letterChar <|> oneOf "_.$:"
+    allowed = allowedNonDigit <|> digitChar

@@ -1,34 +1,35 @@
 module VM.Processing where
 
-import           VM.Types                      as VM
-import           Assembly.Types                as ASM
-import           Common.Types
+import Assembly.Types as ASM
+import Common.Types
 import Polysemy
-import Polysemy.Writer
 import Polysemy.Reader
 import Polysemy.State
+import Polysemy.Writer
+import VM.Types as VM
 
 data VMCompiler m a where
-  NewDynRetLoc ::String -> VMCompiler m String
-  GetFilename ::VMCompiler m String
+  NewDynRetLoc :: String -> VMCompiler m String
+  GetFilename :: VMCompiler m String
   Emit :: Source 'AST 'Unresolved ASM.Command -> VMCompiler m ()
-  
+
 makeSem ''VMCompiler
 
 compile :: String -> [Source 'AST 'Unresolved VM.Command] -> [Source 'AST 'Unresolved ASM.Command]
 compile filename ast = fst . run $ effectsStack program
-  where program = sequence_ (compileCommand . unSource <$> ast) >> halt >> subroutines
-        effectsStack = evalState 0 . runReader filename . runWriter . vmCompilerToState
+  where
+    program = sequence_ (compileCommand . unSource <$> ast) >> halt >> subroutines
+    effectsStack = evalState 0 . runReader filename . runWriter . vmCompilerToState
 
-vmCompilerToState
-  :: Sem (VMCompiler ': effs) a -> Sem (Writer [Source 'AST 'Unresolved ASM.Command] ': Reader String ': State Int ': effs) a
+vmCompilerToState ::
+  Sem (VMCompiler ': effs) a -> Sem (Writer [Source 'AST 'Unresolved ASM.Command] ': Reader String ': State Int ': effs) a
 vmCompilerToState = reinterpret3 $ \case
   NewDynRetLoc prefix -> do
     cnt :: Int <- get
     put (succ cnt)
     pure $ prefix ++ show cnt
   GetFilename -> ask
-  Emit com    -> tell [com]
+  Emit com -> tell [com]
 
 halt :: Member VMCompiler effs => Sem effs ()
 halt = loc "_HALT" >> jmpLbl "_HALT"
@@ -39,25 +40,18 @@ compileCommand (Push Constant value) = do
   loadI value
   push
 compileCommand (Pop Constant _) = error "Pop constant"
-
 compileCommand (Push Argument value) = pushSegment atARG value
 compileCommand (Pop Argument index) = popSegment atARG index
-
 compileCommand (Push VM.Local value) = pushSegment atLCL value
 compileCommand (Pop VM.Local index) = popSegment atLCL index
-
 compileCommand (Push This value) = pushSegment atTHIS value
 compileCommand (Pop This index) = popSegment atTHIS index
-
 compileCommand (Push That value) = pushSegment atTHAT value
 compileCommand (Pop That index) = popSegment atTHAT index
-
 compileCommand (Push Temp value) = pushSegment (command $ CInstruction [A] (Plus D (Val 5)) Nothing) value
 compileCommand (Pop Temp index) = popSegment (command $ CInstruction [A] (Plus D (Val 5)) Nothing) index
-
 compileCommand (Push Pointer value) = pushSegment (command $ CInstruction [A] (Plus D (Val 3)) Nothing) value
-compileCommand (Pop Pointer index)  = popSegment  (command $ CInstruction [A] (Plus D (Val 3)) Nothing) index
-
+compileCommand (Pop Pointer index) = popSegment (command $ CInstruction [A] (Plus D (Val 3)) Nothing) index
 compileCommand (Push Static value) = do
   f <- getFilename
   atLbl (f <> "." <> show value)
@@ -150,7 +144,7 @@ popSegment segment i = do
   _ <- segment
   command $ CInstruction [D] (Plus M (Reg D)) Nothing
   atR 13 -- TODO: find suitable temp register
-  store  -- Save segment[index]
+  store -- Save segment[index]
   pop
   atR 13
   deref
@@ -238,6 +232,7 @@ command :: Member VMCompiler effs => ASM.Command -> Sem effs ()
 command c = emit $ Source c
 
 -- Jumps, labels, locations
+
 -- | Sets A to address of @lbl@
 atLbl :: Member VMCompiler effs => String -> Sem effs ()
 atLbl lbl = command $ AInstruction (Label lbl)
@@ -247,8 +242,13 @@ atR :: Member VMCompiler effs => Address -> Sem effs ()
 atR r = command $ AInstruction (Address r)
 
 -- | Sets A to corresponding VM segment base
-atSP, atLCL, atARG, atTHIS, atTHAT, atTEMP
-  :: Member VMCompiler effs => Sem effs ()
+atSP
+  , atLCL
+  , atARG
+  , atTHIS
+  , atTHAT
+  , atTEMP ::
+    Member VMCompiler effs => Sem effs ()
 atSP = atLbl "SP"
 atLCL = atLbl "LCL"
 atARG = atLbl "ARG"
@@ -280,6 +280,7 @@ true = 0xFFFF
 false = 0x0000
 
 -- Stack ops
+
 -- | Pop stack value to D
 pop :: Member VMCompiler effs => Sem effs ()
 pop = atSP >> decrement >> deref >> load
@@ -297,6 +298,7 @@ push :: Member VMCompiler effs => Sem effs ()
 push = atSP >> deref >> store >> atSP >> increment
 
 -- Memory ops
+
 -- | Load M to D
 load :: Member VMCompiler effs => Sem effs ()
 load = command $ CInstruction [D] (Identity (Reg M)) Nothing

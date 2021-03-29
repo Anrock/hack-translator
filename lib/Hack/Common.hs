@@ -1,9 +1,10 @@
 {-# LANGUAGE BinaryLiterals #-}
+
 module Hack.Common where
 
-import           Data.List.NonEmpty
-import           Data.Word
-import           Data.Bits
+import Data.Bits
+import Data.List.NonEmpty
+import Data.Word
 
 type Binary = [Word16]
 
@@ -22,8 +23,8 @@ stringify is = stringify' (fromList is)
 
 strBits :: Word16 -> String
 strBits w = (\b -> if b then '1' else '0') <$> boolBits w
- where boolBits bits = foldr (\bi acc -> acc ++ [testBit bits bi]) [] [0 .. 15]
+  where
+    boolBits bits = foldr (\bi acc -> acc ++ [testBit bits bi]) [] [0 .. 15]
 
 maskedBy :: (FiniteBits a) => a -> a -> Bool
 maskedBy a b = a .&. b == b
-

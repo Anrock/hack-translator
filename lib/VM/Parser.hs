@@ -1,13 +1,13 @@
 module VM.Parser (parse) where
 
-import Prelude hiding (and, or, not)
-import VM.Types
-import Text.Megaparsec hiding (parse)
-import qualified Text.Megaparsec as P
 import Common.Parser
 import Common.Types
 import Data.Bifunctor (first)
 import Data.Functor (($>))
+import Text.Megaparsec hiding (parse)
+import qualified Text.Megaparsec as P
+import VM.Types
+import Prelude hiding (and, not, or)
 
 parse :: String -> Either String [Source 'AST 'Unresolved Command]
 parse i = first P.errorBundlePretty $ P.parse parseVM "" i
@@ -25,14 +25,17 @@ push = do
   Push seg . fromIntegral <$> number
 
 segment :: Parser Segment
-segment = choice [ symbol "argument" $> Argument
-                 , symbol "local"    $> Local
-                 , symbol "static"   $> Static
-                 , symbol "constant" $> Constant
-                 , symbol "this"     $> This
-                 , symbol "that"     $> That
-                 , symbol "pointer"  $> Pointer
-                 , symbol "temp"     $> Temp]
+segment =
+  choice
+    [ symbol "argument" $> Argument
+    , symbol "local" $> Local
+    , symbol "static" $> Static
+    , symbol "constant" $> Constant
+    , symbol "this" $> This
+    , symbol "that" $> That
+    , symbol "pointer" $> Pointer
+    , symbol "temp" $> Temp
+    ]
 
 eq, lt, gt, add, sub, neg, and, or, not :: Parser Command
 eq = symbol "eq" $> Eq
@@ -44,4 +47,3 @@ neg = symbol "neg" $> Neg
 and = symbol "and" $> And
 or = symbol "or" $> Or
 not = symbol "not" $> Not
-
