@@ -13,28 +13,6 @@ import Text.Megaparsec
 
 type Parser = Parsec Void Binary
 
--- instance Stream Binary where
---   type Tokens Binary = Binary
---   type Token Binary  = Word16
---   tokenToChunk Proxy = pure
---   tokensToChunk Proxy = id
---   chunkToTokens Proxy = id
---   chunkLength Proxy = length
---   chunkEmpty Proxy = null
---   take1_ [] = Nothing
---   take1_ (t:ts) = Just (t, ts)
---   takeN_ n s
---     | n <= 0    = Just ([], s)
---     | null s    = Nothing
---     | otherwise = Just (splitAt n s)
---   takeWhile_ = span
---   showTokens Proxy = stringify'
---   -- NOTE Do not eta-reduce these (breaks inlining)
---   reachOffset o pst =
---     reachOffset' splitAt foldl' id id ('\n','\t') o pst
---   reachOffsetNoLine o pst =
---     reachOffsetNoLine' splitAt foldl' ('\n', '\t') o pst
-
 class (Bounded a, Enum a) => AllValues a where
   allValues :: [a]
   allValues = [minBound .. maxBound]
