@@ -7,9 +7,9 @@ module Assembly.Linker (
 
 import Assembly.Types
 import Common.Types
-import Data.Map.Strict ((!))
+import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as M
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, fromJust)
 import Polysemy
 import Polysemy.State
 
@@ -88,7 +88,7 @@ resolveWith src st = foldMap resolveWith' src
     resolveWith' (Source (AInstruction (Label l))) = [Source . AInstruction $ Address $ addr l]
     resolveWith' (Source (Location _)) = []
     resolveWith' (Source l) = [Source l]
-    addr l = let (Just a) = st ! l in a
+    addr l = maybe (error $ "Impossible: symbol " <> show l <> " not resolved") fromJust $ st !? l
 
 -- | Resolve labels\locations in assembly AST
 resolve :: [Source 'AST 'Unresolved Command] -> [Source 'AST 'Resolved Command]
